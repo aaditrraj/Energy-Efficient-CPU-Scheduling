@@ -1,4 +1,4 @@
-# ⚡ EATS — Energy-Aware Thermal CPU Scheduler
+#  EATS — Energy-Aware Thermal CPU Scheduler
 
 > An energy-efficient CPU scheduling simulator using **DVFS** and **thermal-aware scheduling** for mobile and embedded systems.
 
@@ -9,7 +9,7 @@
 
 ---
 
-## 📌 About
+##  About
 
 This project demonstrates an **Energy-Efficient CPU Scheduling Algorithm** that balances performance and power consumption using:
 
@@ -22,7 +22,7 @@ The simulator provides a real-time animated GUI comparing three scheduling strat
 
 ---
 
-## 🎯 Problem Statement
+##  Problem Statement
 
 Modern mobile and embedded processors waste significant energy by running at maximum performance when the workload doesn't demand it. This project designs a CPU scheduling method that:
 
@@ -32,7 +32,7 @@ Modern mobile and embedded processors waste significant energy by running at max
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -62,7 +62,7 @@ Modern mobile and embedded processors waste significant energy by running at max
 
 ---
 
-## 🔬 Key Techniques
+##  Key Techniques
 
 ### DVFS (Dynamic Voltage and Frequency Scaling)
 
@@ -84,7 +84,7 @@ First-order RC thermal model with:
 
 ---
 
-## 📊 Schedulers Compared
+##  Schedulers Compared
 
 | Feature | EATS (Proposed) | Performance-First | Round-Robin |
 |---------|----------------|-------------------|-------------|
@@ -97,7 +97,7 @@ First-order RC thermal model with:
 
 ---
 
-## 🖥️ Screenshots
+##  Screenshots
 
 The simulator provides 6 real-time plots:
 
@@ -112,7 +112,7 @@ The simulator provides 6 real-time plots:
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 
@@ -140,7 +140,7 @@ python cpu_simulator_fixed.py
 
 ---
 
-## 🎮 How to Use
+##  How to Use
 
 | Button | Action |
 |--------|--------|
@@ -159,7 +159,7 @@ python cpu_simulator_fixed.py
 
 ---
 
-## 📈 Sample Results
+##  Sample Results
 
 Running **Compare All** with default settings (Seed=1, 30 tasks):
 
@@ -177,7 +177,7 @@ The batch run generates:
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 eats-cpu-scheduler/
@@ -194,7 +194,7 @@ eats-cpu-scheduler/
 
 ---
 
-## 🔧 Configuration
+##  Configuration
 
 Key simulation parameters can be tuned at the top of `cpu_simulator_fixed.py`:
 
@@ -226,7 +226,7 @@ SIM_DURATION = 10.0     # Total simulation time
 
 ---
 
-## 📚 Academic Context
+##  Academic Context
 
 This project demonstrates core **Operating Systems** concepts:
 
@@ -256,13 +256,13 @@ This project demonstrates core **Operating Systems** concepts:
 
 ---
 
-## 📄 License
+##  License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 👤 Author
+##  Author
 
 **Aadit**
 
@@ -270,7 +270,7 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ---
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - DVFS concepts based on research in dynamic power management for embedded systems
 - Thermal model based on first-order RC approximation used in industry thermal simulators
