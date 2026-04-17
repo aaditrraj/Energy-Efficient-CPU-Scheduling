@@ -111,3 +111,128 @@ def generate_workload(seed=1, n=30):
     if tasks and tasks[0].arrival > 0:
         tasks[0].arrival = 0.0
     return tasks
+# ============================================================
+# Power & Thermal helpers
+# ============================================================
+def dvfs_power(freq_frac, cores):
+    """Total power = dynamic + static."""
+    voltage = 1.0
+    for f, v in DVFS_LEVELS:
+        if abs(f - freq_frac) < 0.01:
+            voltage = v
+            break
+    return C_DYN * (voltage ** 2) * freq_frac * cores + P_STATIC * cores
+
+
+def thermal_step(current_temp, power, dt):
+    """First-order RC thermal model:  T_ss = T_amb + P * R_th."""
+    target = AMBIENT_TEMP + power * THERMAL_RESISTANCE
+    alpha  = dt / TEMP_TAU
+    return current_temp + alpha * (target - current_temp)
+
+
+def cycles_per_second(freq_frac, cores):
+    return freq_frac * PERF_CONSTANT * cores * 1000.0
+
+
+# ============================================================
+# Scheduler: EATS (Proposed)
+# ============================================================
+class EATSStepper:
+    """
+    Energy-Aware Thermal Scheduler (EATS)
+    1. Reads current die temperature -> limits max frequency if above thresholds.
+    2. Evaluates all (freq, cores) combos within thermal limit.
+    3. Picks the *lowest-power* combo that still meets every ready task's deadline.
+    4. Dispatches tasks in priority order (Critical -> Normal -> Background),
+       then by Earliest-Deadline-First within each priority band.
+    """
+    NAME = "EATS (Proposed)"
+
+    def __init__(self, tasks):
+        self.tasks       = deepcopy(tasks)
+        self.now         = 0.0
+        self.freq        = FREQ_LEVELS[0]
+        self.cores       = 1
+        self.energy      = 0.0
+        self.temperature = AMBIENT_TEMP
+        self.history     = {k: [] for k in
+                           ("t", "energy", "freq", "cores", "util", "temp", "power", "running_task")}
+
+    def runnable(self):
+        return [t for t in self.tasks if t.is_ready(self.now)]
+
+    def _thermal_max_freq(self):
+        if self.temperature >= CRITICAL_TEMP:
+            return FREQ_LEVELS[0]
+        if self.temperature >= THROTTLE_TEMP:
+            ratio   = (self.temperature - THROTTLE_TEMP) / (CRITICAL_TEMP - THROTTLE_TEMP)
+            max_idx = max(0, int((1.0 - ratio) * (len(FREQ_LEVELS) - 1)))
+            return FREQ_LEVELS[max_idx]
+        return FREQ_LEVELS[-1]
+
+    def _pick_config(self, ready):
+        thermal_cap = self._thermal_max_freq()
+        best = None
+        for f, _v in DVFS_LEVELS:
+            if f > thermal_cap:
+                continue
+            for n in range(1, MAX_CORES + 1):
+                feasible = True
+                for t in ready:
+                    rate = f * n if f * n > 0 else 1e-9
+                    if self.now + t.remaining / rate > t.deadline + 1e-9:
+                        if t.priority == "critical":
+                            feasible = False
+                            break
+                if feasible:
+                    pw = dvfs_power(f, n)
+                    if best is None or pw < best[2]:
+                        best = (f, n, pw)
+        return (best[0], best[1]) if best else (thermal_cap, MAX_CORES)
+
+    def step(self, dt=DT):
+        if all(t.is_done() for t in self.tasks) or self.now >= SIM_DURATION:
+            return False
+
+        ready = sorted(self.runnable(), key=lambda t: (
+            {"critical": 0, "normal": 1, "background": 2}[t.priority],
+            t.deadline,
+        ))
+        self.freq, self.cores = self._pick_config(ready)
+
+        cap = cycles_per_second(self.freq, self.cores) * dt
+        running_tid = None
+        work_done   = 0.0
+        for t in ready:
+            if cap <= 0:
+                break
+            cap_sec = cap / (PERF_CONSTANT * 1000.0)
+            do = min(t.remaining, cap_sec)
+            if do <= 0:
+                do = min(1e-6, t.remaining)
+            if t.start_time is None and do > 0:
+                t.start_time = self.now
+            t.remaining -= do
+            work_done   += do
+            running_tid  = t.tid
+            cap -= do * (PERF_CONSTANT * 1000.0)
+            if t.is_done():
+                t.finish_time = self.now + dt
+            if cap <= 0:
+                break
+
+        pw = dvfs_power(self.freq, self.cores)
+        self.energy      += pw * dt
+        self.temperature  = thermal_step(self.temperature, pw, dt)
+        self.now         += dt
+        util = min(work_done / (self.cores * self.freq * dt) if self.cores * self.freq * dt > 0 else 0, 1.0)
+
+        h = self.history
+        h["t"].append(self.now);        h["energy"].append(self.energy)
+        h["freq"].append(self.freq);    h["cores"].append(self.cores)
+        h["util"].append(util);         h["temp"].append(self.temperature)
+        h["power"].append(pw);          h["running_task"].append(running_tid)
+
+        return not (all(t.is_done() for t in self.tasks) or self.now >= SIM_DURATION)
+
