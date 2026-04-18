@@ -236,3 +236,140 @@ class EATSStepper:
 
         return not (all(t.is_done() for t in self.tasks) or self.now >= SIM_DURATION)
 
+
+# ============================================================
+# Scheduler: Performance-First (baseline)
+# ============================================================
+class PerformanceFirstStepper:
+    """Always max frequency + all cores. No energy or thermal awareness."""
+    NAME = "Performance-First"
+
+    def __init__(self, tasks):
+        self.tasks       = deepcopy(tasks)
+        self.now         = 0.0
+        self.freq        = max(FREQ_LEVELS)
+        self.cores       = MAX_CORES
+        self.energy      = 0.0
+        self.temperature = AMBIENT_TEMP
+        self.history     = {k: [] for k in
+                           ("t", "energy", "freq", "cores", "util", "temp", "power", "running_task")}
+
+    def runnable(self):
+        return [t for t in self.tasks if t.is_ready(self.now)]
+
+    def step(self, dt=DT):
+        if all(t.is_done() for t in self.tasks) or self.now >= SIM_DURATION:
+            return False
+
+        self.freq, self.cores = max(FREQ_LEVELS), MAX_CORES
+        ready = sorted(self.runnable(), key=lambda t: t.deadline)
+        cap = cycles_per_second(self.freq, self.cores) * dt
+        running_tid = None
+        work_done   = 0.0
+
+        for t in ready:
+            if cap <= 0:
+                break
+            cap_sec = cap / (PERF_CONSTANT * 1000.0)
+            do = min(t.remaining, cap_sec)
+            if do <= 0:
+                do = min(1e-6, t.remaining)
+            if t.start_time is None and do > 0:
+                t.start_time = self.now
+            t.remaining -= do
+            work_done   += do
+            running_tid  = t.tid
+            cap -= do * (PERF_CONSTANT * 1000.0)
+            if t.is_done():
+                t.finish_time = self.now + dt
+            if cap <= 0:
+                break
+
+        pw = dvfs_power(self.freq, self.cores)
+        self.energy      += pw * dt
+        self.temperature  = thermal_step(self.temperature, pw, dt)
+        self.now         += dt
+        util = min(work_done / (self.cores * self.freq * dt) if self.cores * self.freq * dt > 0 else 0, 1.0)
+
+        h = self.history
+        h["t"].append(self.now);        h["energy"].append(self.energy)
+        h["freq"].append(self.freq);    h["cores"].append(self.cores)
+        h["util"].append(util);         h["temp"].append(self.temperature)
+        h["power"].append(pw);          h["running_task"].append(running_tid)
+
+        return not (all(t.is_done() for t in self.tasks) or self.now >= SIM_DURATION)
+
+
+# ============================================================
+# Scheduler: Round-Robin (baseline)
+# ============================================================
+class RoundRobinStepper:
+    """Fixed mid-level frequency, all cores, FIFO task order."""
+    NAME = "Round-Robin"
+
+    def __init__(self, tasks):
+        self.tasks       = deepcopy(tasks)
+        self.now         = 0.0
+        self.freq        = 0.8
+        self.cores       = MAX_CORES
+        self.energy      = 0.0
+        self.temperature = AMBIENT_TEMP
+        self.history     = {k: [] for k in
+                           ("t", "energy", "freq", "cores", "util", "temp", "power", "running_task")}
+
+    def runnable(self):
+        return [t for t in self.tasks if t.is_ready(self.now)]
+
+    def step(self, dt=DT):
+        if all(t.is_done() for t in self.tasks) or self.now >= SIM_DURATION:
+            return False
+
+        ready = sorted(self.runnable(), key=lambda t: t.tid)
+        cap = cycles_per_second(self.freq, self.cores) * dt
+        running_tid = None
+        work_done   = 0.0
+
+        for t in ready:
+            if cap <= 0:
+                break
+            cap_sec = cap / (PERF_CONSTANT * 1000.0)
+            do = min(t.remaining, cap_sec)
+            if do <= 0:
+                do = min(1e-6, t.remaining)
+            if t.start_time is None and do > 0:
+                t.start_time = self.now
+            t.remaining -= do
+            work_done   += do
+            running_tid  = t.tid
+            cap -= do * (PERF_CONSTANT * 1000.0)
+            if t.is_done():
+                t.finish_time = self.now + dt
+            if cap <= 0:
+                break
+
+        pw = dvfs_power(self.freq, self.cores)
+        self.energy      += pw * dt
+        self.temperature  = thermal_step(self.temperature, pw, dt)
+        self.now         += dt
+        util = min(work_done / (self.cores * self.freq * dt) if self.cores * self.freq * dt > 0 else 0, 1.0)
+
+        h = self.history
+        h["t"].append(self.now);        h["energy"].append(self.energy)
+        h["freq"].append(self.freq);    h["cores"].append(self.cores)
+        h["util"].append(util);         h["temp"].append(self.temperature)
+        h["power"].append(pw);          h["running_task"].append(running_tid)
+
+        return not (all(t.is_done() for t in self.tasks) or self.now >= SIM_DURATION)
+
+
+# ============================================================
+# Shared statistics helper
+# ============================================================
+def _calc_missed(stepper):
+    return sum(
+        1 for t in stepper.tasks
+        if t.deadline is not None and (
+            (t.finish_time is not None and t.finish_time > t.deadline)
+            or (not t.is_done() and stepper.now > t.deadline)
+        )
+    )
