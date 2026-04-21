@@ -1,38 +1,57 @@
-#  EATS — Energy-Aware Thermal CPU Scheduler
+<div align="center">
 
-> An energy-efficient CPU scheduling simulator using **DVFS** and **thermal-aware scheduling** for mobile and embedded systems.
+# ⚡ EATS — Energy-Aware Thermal CPU Scheduler
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)
-![Tkinter](https://img.shields.io/badge/GUI-Tkinter-blue)
-![Matplotlib](https://img.shields.io/badge/Plots-Matplotlib-orange)
-![License](https://img.shields.io/badge/License-MIT-green)
+**An energy-efficient CPU scheduling simulator using DVFS and thermal-aware scheduling for mobile and embedded systems.**
+
+[![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![JavaScript](https://img.shields.io/badge/JavaScript-ES6%2B-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![Chart.js](https://img.shields.io/badge/Chart.js-4.4-FF6384?style=for-the-badge&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
+[![Tkinter](https://img.shields.io/badge/GUI-Tkinter-blue?style=for-the-badge)](https://docs.python.org/3/library/tkinter.html)
+[![Matplotlib](https://img.shields.io/badge/Plots-Matplotlib-orange?style=for-the-badge)](https://matplotlib.org/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+
+<br/>
+
+*Simulates and compares three CPU scheduling strategies — EATS, Performance-First, and Round-Robin — with real-time animated visualizations of energy consumption, thermal behavior, DVFS scaling, and core utilization.*
+
+</div>
 
 ---
 
-##  About
+## 📌 About
 
-This project demonstrates an **Energy-Efficient CPU Scheduling Algorithm** that balances performance and power consumption using:
+Modern mobile and embedded processors waste significant energy by running at maximum performance when the workload doesn't demand it. **EATS** is a simulator that demonstrates how intelligent scheduling can dramatically reduce power consumption without sacrificing performance on critical tasks.
 
-- **DVFS (Dynamic Voltage and Frequency Scaling)** — dynamically adjusts CPU frequency and voltage based on workload
+The project ships with **two interfaces**:
+
+| Interface | Stack | Launch |
+|-----------|-------|--------|
+| 🌐 **Web App** | HTML · CSS · JavaScript · Chart.js | Open `index.html` in any browser |
+| 🖥️ **Desktop App** | Python · Tkinter · Matplotlib · NumPy | `python cpu_simulator_fixed.py` |
+
+Both interfaces implement the same simulation engine and provide identical scheduling algorithms, real-time charts, and comparison tools.
+
+### Core Techniques
+
+- **DVFS (Dynamic Voltage and Frequency Scaling)** — dynamically adjusts CPU frequency and voltage based on workload demand
 - **Thermal-Aware Scheduling** — monitors die temperature and throttles frequency to prevent overheating
-- **Priority-Based Task Dispatching** — ensures critical tasks meet deadlines while saving energy on background work
+- **Priority-Based Task Dispatching** — ensures critical tasks meet deadlines while conserving energy on background work
 - **Dynamic Core Management** — activates only the cores needed, reducing static/leakage power
 
-The simulator provides a real-time animated GUI comparing three scheduling strategies to demonstrate the energy savings achieved by the proposed algorithm.
-
 ---
 
-##  Problem Statement
+## 🎯 Problem Statement
 
-Modern mobile and embedded processors waste significant energy by running at maximum performance when the workload doesn't demand it. This project designs a CPU scheduling method that:
+This project designs an energy-efficient CPU scheduling algorithm that:
 
-1. **Saves energy** by selecting the lowest frequency/voltage that still meets deadlines
+1. **Saves energy** by selecting the lowest frequency/voltage that still meets task deadlines
 2. **Manages thermals** by proactively throttling before hitting dangerous temperatures
-3. **Maintains performance** by prioritizing critical tasks and using EDF (Earliest Deadline First) scheduling
+3. **Maintains performance** by prioritizing critical tasks using EDF (Earliest Deadline First) scheduling
 
 ---
 
-##  Architecture
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -58,11 +77,19 @@ Modern mobile and embedded processors waste significant energy by running at max
     │  Control │ │  Model   │ │ Manager  │
     │ 4 levels │ │ RC model │ │ 1-4 cores│
     └──────────┘ └──────────┘ └──────────┘
+          │            │            │
+          └────────────┼────────────┘
+                       ▼
+        ┌─────────────────────────────┐
+        │     Visualization Layer     │
+        │  Web (Chart.js) │ Desktop   │
+        │    (Tkinter + Matplotlib)   │
+        └─────────────────────────────┘
 ```
 
 ---
 
-##  Key Techniques
+## 🔬 Key Techniques
 
 ### DVFS (Dynamic Voltage and Frequency Scaling)
 
@@ -78,13 +105,15 @@ Power consumption follows: **P = C × V² × f**
 ### Thermal Model
 
 First-order RC thermal model with:
-- Ambient temperature: 35°C
-- Throttle threshold: 75°C (begin soft throttling)
-- Critical threshold: 90°C (force minimum frequency)
+- **Ambient temperature:** 35°C
+- **Throttle threshold:** 75°C (begin soft throttling)
+- **Critical threshold:** 90°C (force minimum frequency)
+- **Thermal resistance:** 8.0 °C/W
+- **Thermal capacitance:** 5.0 J/°C
 
 ---
 
-##  Schedulers Compared
+## 📊 Schedulers Compared
 
 | Feature | EATS (Proposed) | Performance-First | Round-Robin |
 |---------|----------------|-------------------|-------------|
@@ -97,9 +126,35 @@ First-order RC thermal model with:
 
 ---
 
-##  Screenshots
+## 🌐 Web Interface
 
-The simulator provides 6 real-time plots:
+The web app provides a premium, interactive experience with:
+
+- **Glassmorphism UI** — frosted-glass panels with animated particle background
+- **Real-time CPU visualization** — animated core activity, frequency bar, temperature gauge with needle, DVFS mode indicator, and task queue breakdown
+- **6 live-updating charts** — powered by Chart.js with smooth animations
+- **Stat cards** — energy consumed, die temperature, CPU utilization, tasks completed, deadline misses, and instantaneous power
+- **Scheduler comparison** — side-by-side energy and temperature chart overlays with bar chart summaries
+- **Interactive controls** — scheduler selection, seed, task count, and speed slider
+
+### Running the Web App
+
+Simply open `index.html` in any modern browser — no build step or server required.
+
+```bash
+# Option 1: Double-click index.html in your file explorer
+
+# Option 2: From the terminal
+start index.html          # Windows
+open index.html           # macOS
+xdg-open index.html       # Linux
+```
+
+---
+
+## 🖥️ Desktop Interface (Python)
+
+The Tkinter-based desktop app provides 6 real-time Matplotlib plots with animated simulation:
 
 | Plot | Description |
 |------|-------------|
@@ -110,37 +165,30 @@ The simulator provides 6 real-time plots:
 | CPU Utilization | How busy the CPU is (0–100%) |
 | Instantaneous Power (W) | Real-time power draw |
 
----
-
-##  Getting Started
-
-### Prerequisites
-
-- Python 3.8 or higher
-- pip (Python package manager)
-
-### Installation
+### Running the Desktop App
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/eats-cpu-scheduler.git
-cd eats-cpu-scheduler
-
 # Install dependencies
 pip install matplotlib numpy
+
+# Run
+python cpu_simulator_fixed.py
 ```
 
 > **Note:** `tkinter` comes pre-installed with Python on most systems. If missing, install it via your package manager.
 
-### Running the Simulator
-
-```bash
-python cpu_simulator_fixed.py
-```
-
 ---
 
-##  How to Use
+## 🎮 How to Use
+
+Both interfaces share the same controls:
+
+| Control | Description |
+|---------|-------------|
+| **Scheduler** | Choose EATS, Performance-First, or Round-Robin |
+| **Seed** | Random seed for workload generation (change for different task sets) |
+| **Tasks** | Number of tasks to generate (default: 30) |
+| **Speed** | Animation speed multiplier (0.25× to 4×) |
 
 | Button | Action |
 |--------|--------|
@@ -148,18 +196,11 @@ python cpu_simulator_fixed.py
 | **Pause** | Pause the running simulation |
 | **Reset** | Clear plots and reset to initial state |
 | **Compare All** | Run all 3 schedulers on identical workload and compare side-by-side |
-| **Batch Run** | Test across 5 seeds, export CSV + graphs for analysis |
-
-### Controls
-
-- **Scheduler** — Choose EATS, Performance-First, or Round-Robin
-- **Seed** — Random seed for workload generation (change for different task sets)
-- **Tasks** — Number of tasks to generate (default: 30)
-- **Speed** — Animation speed multiplier (0.25× to 4×)
+| **Batch Run** *(Desktop only)* | Test across 5 seeds, export CSV + graphs for analysis |
 
 ---
 
-##  Sample Results
+## 📈 Sample Results
 
 Running **Compare All** with default settings (Seed=1, 30 tasks):
 
@@ -168,7 +209,7 @@ EATS saves ~55% energy vs Performance-First
 EATS peak temperature: ~45°C  vs  Performance-First: ~70°C
 ```
 
-### Batch Run Output
+### Batch Run Output *(Desktop only)*
 
 The batch run generates:
 - `results.csv` — Tabular data for all runs
@@ -177,56 +218,60 @@ The batch run generates:
 
 ---
 
-##  Project Structure
+## 📁 Project Structure
 
 ```
-eats-cpu-scheduler/
+OS Project/
 │
-├── cpu_simulator_fixed.py   # Main simulator (all-in-one)
-├── README.md                # This file
-└── batch_graphs/            # Generated after batch run
+├── index.html                 # Web app — main HTML
+├── style.css                  # Web app — glassmorphism styles & animations
+├── app.js                     # Web app — simulation engine & UI controller
+│
+├── cpu_simulator_fixed.py     # Desktop app — Tkinter/Matplotlib simulator
+├── README.md                  # This file
+│
+└── batch_graphs/              # Generated after batch run (Desktop)
     ├── EATS_Proposed_seed1.png
     ├── Performance-First_seed1.png
     ├── Round-Robin_seed1.png
-    ├── ...
     └── summary_comparison.png
 ```
 
 ---
 
-##  Configuration
+## 🔧 Configuration
 
-Key simulation parameters can be tuned at the top of `cpu_simulator_fixed.py`:
+Key simulation parameters can be tuned in `app.js` (web) or `cpu_simulator_fixed.py` (desktop):
 
-```python
-# DVFS Operating Points
-DVFS_LEVELS = [
-    (0.4, 0.60),   # (frequency, voltage)
-    (0.6, 0.75),
-    (0.8, 0.90),
-    (1.0, 1.00),
-]
+```javascript
+// DVFS Operating Points
+const DVFS_LEVELS = [
+    { freq: 0.4, voltage: 0.60, label: 'Ultra Low Power' },
+    { freq: 0.6, voltage: 0.75, label: 'Low Power' },
+    { freq: 0.8, voltage: 0.90, label: 'Balanced' },
+    { freq: 1.0, voltage: 1.00, label: 'Full Performance' },
+];
 
-# Hardware
-MAX_CORES     = 4        # Number of CPU cores
-C_DYN         = 1.5      # Dynamic capacitance
-P_STATIC      = 0.10     # Static power per core (W)
+// Hardware
+const MAX_CORES        = 4;       // Number of CPU cores
+const C_DYN            = 1.5;     // Dynamic capacitance
+const P_STATIC         = 0.10;    // Static power per core (W)
 
-# Thermal Model
-THERMAL_RESISTANCE  = 8.0    # °C/W
-THERMAL_CAPACITANCE = 5.0    # J/°C
-AMBIENT_TEMP        = 35.0   # °C
-THROTTLE_TEMP       = 75.0   # °C
-CRITICAL_TEMP       = 90.0   # °C
+// Thermal Model
+const THERMAL_RESISTANCE  = 8.0;  // °C/W
+const THERMAL_CAPACITANCE = 5.0;  // J/°C
+const AMBIENT_TEMP        = 35.0; // °C
+const THROTTLE_TEMP       = 75.0; // °C
+const CRITICAL_TEMP       = 90.0; // °C
 
-# Simulation
-DT           = 0.05     # Time-step (seconds)
-SIM_DURATION = 10.0     # Total simulation time
+// Simulation
+const DT           = 0.05;       // Time-step (seconds)
+const SIM_DURATION = 10.0;       // Total simulation time
 ```
 
 ---
 
-##  Academic Context
+## 📚 Academic Context
 
 This project demonstrates core **Operating Systems** concepts:
 
@@ -249,29 +294,34 @@ This project demonstrates core **Operating Systems** concepts:
 
 ## 🛠️ Built With
 
-- **Python 3** — Core language
-- **Tkinter** — Native GUI framework
-- **Matplotlib** — Scientific plotting and animation
-- **NumPy** — Numerical computation
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Web Frontend** | HTML5 / CSS3 / JavaScript (ES6+) | Structure, styling, logic |
+| **Web Charts** | Chart.js 4.4 | Real-time data visualization |
+| **Web Fonts** | Inter, JetBrains Mono (Google Fonts) | Typography |
+| **Desktop GUI** | Python 3 / Tkinter | Native desktop interface |
+| **Desktop Plots** | Matplotlib | Scientific plotting & animation |
+| **Computation** | NumPy | Numerical computation |
 
 ---
 
-##  License
+## 📄 License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ---
 
-##  Author
+## 👤 Author
 
 **Aadit**
 
-- GitHub: [@aaditrraj](https://github.com/aaditrraj)
+- GitHub: [@yourusername](https://github.com/yourusername)
 
 ---
 
-##  Acknowledgments
+## 🙏 Acknowledgments
 
 - DVFS concepts based on research in dynamic power management for embedded systems
 - Thermal model based on first-order RC approximation used in industry thermal simulators
 - EDF scheduling algorithm as described in real-time systems literature
+- Chart.js for powering the web-based real-time visualizations

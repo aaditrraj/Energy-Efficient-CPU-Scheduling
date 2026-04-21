@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EATS — Energy-Aware Thermal CPU Scheduler</title>
+    <meta name="description" content="Interactive simulator for energy-efficient CPU scheduling using DVFS and thermal-aware scheduling for mobile and embedded systems.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Animated background particles -->
+    <div class="bg-particles" id="bgParticles"></div>
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <div class="logo-icon">
+                <svg viewBox="0 0 40 40" fill="none">
+                    <rect x="4" y="4" width="32" height="32" rx="6" stroke="url(#logoGrad)" stroke-width="2.5"/>
+                    <rect x="10" y="10" width="8" height="8" rx="1.5" fill="url(#logoGrad)" opacity="0.9"/>
+                    <rect x="22" y="10" width="8" height="8" rx="1.5" fill="url(#logoGrad)" opacity="0.6"/>
+                    <rect x="10" y="22" width="8" height="8" rx="1.5" fill="url(#logoGrad)" opacity="0.6"/>
+                    <rect x="22" y="22" width="8" height="8" rx="1.5" fill="url(#logoGrad)" opacity="0.3"/>
+                    <line x1="20" y1="0" x2="20" y2="4" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="20" y1="36" x2="20" y2="40" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="0" y1="20" x2="4" y2="20" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="36" y1="20" x2="40" y2="20" stroke="url(#logoGrad)" stroke-width="1.5" stroke-linecap="round"/>
+                    <defs>
+                        <linearGradient id="logoGrad" x1="0" y1="0" x2="40" y2="40">
+                            <stop offset="0%" stop-color="#00d4aa"/>
+                            <stop offset="100%" stop-color="#6c63ff"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <div class="header-text">
+                <h1>EATS</h1>
+                <p class="subtitle">Energy-Aware Thermal CPU Scheduler</p>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="status-badge" id="statusBadge">
+                <span class="status-dot"></span>
+                <span class="status-text" id="statusText">Ready</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="app-main">
+        <!-- Control Panel -->
+        <section class="control-panel glass-panel" id="controlPanel">
+            <div class="controls-row">
+                <div class="control-group">
+                    <label for="schedulerSelect">Scheduler</label>
+                    <div class="select-wrapper">
+                        <select id="schedulerSelect">
+                            <option value="eats" selected>EATS (Proposed)</option>
+                            <option value="performance">Performance-First</option>
+                            <option value="roundrobin">Round-Robin</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label for="seedInput">Seed</label>
+                    <input type="number" id="seedInput" value="1" min="1" max="9999">
+                </div>
+                <div class="control-group">
+                    <label for="tasksInput">Tasks</label>
+                    <input type="number" id="tasksInput" value="30" min="5" max="100">
+                </div>
+                <div class="control-group speed-group">
+                    <label for="speedSlider">Speed <span id="speedValue">1.0×</span></label>
+                    <input type="range" id="speedSlider" min="0.25" max="4" step="0.25" value="1">
+                </div>
+                <div class="control-group buttons-group">
+                    <button id="btnStart" class="btn btn-primary">
+                        <svg viewBox="0 0 20 20" fill="currentColor"><polygon points="5,3 17,10 5,17"/></svg>
+                        Start
+                    </button>
+                    <button id="btnPause" class="btn btn-secondary" disabled>
+                        <svg viewBox="0 0 20 20" fill="currentColor"><rect x="4" y="3" width="4" height="14" rx="1"/><rect x="12" y="3" width="4" height="14" rx="1"/></svg>
+                        Pause
+                    </button>
+                    <button id="btnReset" class="btn btn-secondary" disabled>
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10a7 7 0 0 1 13.6-2.3M17 10a7 7 0 0 1-13.6 2.3" stroke-linecap="round"/><polyline points="3,4 3,10 9,10" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        Reset
+                    </button>
+                    <button id="btnCompare" class="btn btn-accent">
+                        <svg viewBox="0 0 20 20" fill="currentColor"><rect x="2" y="10" width="4" height="8" rx="1"/><rect x="8" y="5" width="4" height="13" rx="1"/><rect x="14" y="2" width="4" height="16" rx="1"/></svg>
+                        Compare All
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stats Cards Row -->
+        <section class="stats-row" id="statsRow">
+            <div class="stat-card glass-panel" id="statEnergy">
+                <div class="stat-icon energy-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linejoin="round" stroke-linecap="round"/></svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-value" id="valEnergy">0.00</span>
+                    <span class="stat-unit">Joules</span>
+                    <span class="stat-label">Energy Consumed</span>
+                </div>
+            </div>
+            <div class="stat-card glass-panel" id="statTemp">
+                <div class="stat-icon temp-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-value" id="valTemp">35.0</span>
+                    <span class="stat-unit">°C</span>
+                    <span class="stat-label">Die Temperature</span>
+                </div>
+            </div>
+            <div class="stat-card glass-panel" id="statUtil">
+                <div class="stat-icon util-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-value" id="valUtil">0</span>
+                    <span class="stat-unit">%</span>
+                    <span class="stat-label">CPU Utilization</span>
+                </div>
+            </div>
+            <div class="stat-card glass-panel" id="statTasks">
+                <div class="stat-icon tasks-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-value" id="valTasks">0/0</span>
+                    <span class="stat-unit">done</span>
+                    <span class="stat-label">Tasks Completed</span>
+                </div>
+            </div>
+            <div class="stat-card glass-panel" id="statMissed">
+                <div class="stat-icon missed-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-value" id="valMissed">0</span>
+                    <span class="stat-unit">missed</span>
+                    <span class="stat-label">Deadline Misses</span>
+                </div>
+            </div>
+            <div class="stat-card glass-panel" id="statPower">
+                <div class="stat-icon power-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 5.64a9 9 0 11-12.73 0M12 2v10"/></svg>
+                </div>
+                <div class="stat-content">
+                    <span class="stat-value" id="valPower">0.00</span>
+                    <span class="stat-unit">Watts</span>
+                    <span class="stat-label">Current Power</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- CPU Visualization + Charts Grid -->
+        <div class="main-grid">
+            <!-- CPU Visualization Panel -->
+            <section class="cpu-viz glass-panel" id="cpuVizPanel">
+                <h2 class="panel-title">CPU State</h2>
+                
+                <!-- Core Visualization -->
+                <div class="cores-viz">
+                    <div class="core" id="core0">
+                        <div class="core-inner">
+                            <span class="core-label">C0</span>
+                            <div class="core-activity"></div>
+                        </div>
+                    </div>
+                    <div class="core" id="core1">
+                        <div class="core-inner">
+                            <span class="core-label">C1</span>
+                            <div class="core-activity"></div>
+                        </div>
+                    </div>
+                    <div class="core" id="core2">
+                        <div class="core-inner">
+                            <span class="core-label">C2</span>
+                            <div class="core-activity"></div>
+                        </div>
+                    </div>
+                    <div class="core" id="core3">
+                        <div class="core-inner">
+                            <span class="core-label">C3</span>
+                            <div class="core-activity"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Frequency Indicator -->
+                <div class="freq-indicator">
+                    <span class="freq-label">Frequency</span>
+                    <div class="freq-bar-bg">
+                        <div class="freq-bar-fill" id="freqBarFill"></div>
+                    </div>
+                    <span class="freq-value" id="freqValue">0.4×</span>
+                </div>
+
+                <!-- Temperature Gauge -->
+                <div class="temp-gauge-container">
+                    <span class="gauge-label">Die Temperature</span>
+                    <div class="temp-gauge">
+                        <svg viewBox="0 0 200 120" class="gauge-svg">
+                            <defs>
+                                <linearGradient id="tempGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" stop-color="#00d4aa"/>
+                                    <stop offset="50%" stop-color="#ffd93d"/>
+                                    <stop offset="100%" stop-color="#ff3d3d"/>
+                                </linearGradient>
+                            </defs>
+                            <!-- Background arc -->
+                            <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="12" stroke-linecap="round"/>
+                            <!-- Throttle marker -->
+                            <line id="throttleMarker" x1="0" y1="0" x2="0" y2="0" stroke="#ffd93d" stroke-width="2" opacity="0.6"/>
+                            <!-- Critical marker -->
+                            <line id="criticalMarker" x1="0" y1="0" x2="0" y2="0" stroke="#ff3d3d" stroke-width="2" opacity="0.6"/>
+                            <!-- Value arc -->
+                            <path id="tempArc" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#tempGrad)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 999"/>
+                            <!-- Needle -->
+                            <line id="tempNeedle" x1="100" y1="100" x2="100" y2="30" stroke="#fff" stroke-width="2.5" stroke-linecap="round" transform="rotate(-90, 100, 100)"/>
+                            <circle cx="100" cy="100" r="5" fill="#fff"/>
+                        </svg>
+                        <div class="gauge-value-display">
+                            <span class="gauge-temp" id="gaugeTemp">35.0°</span>
+                        </div>
+                        <div class="gauge-labels">
+                            <span>35°</span>
+                            <span>90°</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DVFS Level -->
+                <div class="dvfs-indicator">
+                    <span class="dvfs-label">DVFS Mode</span>
+                    <div class="dvfs-levels">
+                        <div class="dvfs-level" id="dvfs0" data-level="Ultra Low">ULP</div>
+                        <div class="dvfs-level" id="dvfs1" data-level="Low Power">LP</div>
+                        <div class="dvfs-level" id="dvfs2" data-level="Balanced">BAL</div>
+                        <div class="dvfs-level" id="dvfs3" data-level="Full Perf">MAX</div>
+                    </div>
+                </div>
+
+                <!-- Task Queue -->
+                <div class="task-queue-viz">
+                    <span class="queue-label">Task Queue</span>
+                    <div class="queue-bar" id="taskQueueBar">
+                        <div class="queue-segment critical-seg" id="qCritical"><span>0</span></div>
+                        <div class="queue-segment normal-seg" id="qNormal"><span>0</span></div>
+                        <div class="queue-segment bg-seg" id="qBackground"><span>0</span></div>
+                    </div>
+                    <div class="queue-legend">
+                        <span class="legend-item"><i class="dot critical-dot"></i>Critical</span>
+                        <span class="legend-item"><i class="dot normal-dot"></i>Normal</span>
+                        <span class="legend-item"><i class="dot bg-dot"></i>Background</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Charts Grid -->
+            <section class="charts-grid" id="chartsGrid">
+                <div class="chart-card glass-panel">
+                    <h3 class="chart-title">Cumulative Energy (J)</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chartEnergy"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card glass-panel">
+                    <h3 class="chart-title">CPU Temperature (°C)</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chartTemp"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card glass-panel">
+                    <h3 class="chart-title">DVFS Frequency</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chartFreq"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card glass-panel">
+                    <h3 class="chart-title">Active Cores</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chartCores"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card glass-panel">
+                    <h3 class="chart-title">CPU Utilization</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chartUtil"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card glass-panel">
+                    <h3 class="chart-title">Instantaneous Power (W)</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chartPower"></canvas>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Comparison Results Panel (hidden by default) -->
+        <section class="comparison-panel glass-panel" id="comparisonPanel" style="display:none;">
+            <div class="comparison-header">
+                <h2 class="panel-title">Scheduler Comparison Results</h2>
+                <button id="btnCloseCompare" class="btn btn-small btn-secondary">Close</button>
+            </div>
+            <div class="comparison-grid">
+                <div class="comp-chart-card glass-panel">
+                    <h3 class="chart-title">Energy Comparison (J)</h3>
+                    <div class="chart-wrapper"><canvas id="compChartEnergy"></canvas></div>
+                </div>
+                <div class="comp-chart-card glass-panel">
+                    <h3 class="chart-title">Temperature Comparison (°C)</h3>
+                    <div class="chart-wrapper"><canvas id="compChartTemp"></canvas></div>
+                </div>
+                <div class="comp-chart-card glass-panel">
+                    <h3 class="chart-title">Total Energy Consumed</h3>
+                    <div class="chart-wrapper"><canvas id="compBarEnergy"></canvas></div>
+                </div>
+                <div class="comp-chart-card glass-panel">
+                    <h3 class="chart-title">Missed Deadlines & Peak Temp Rise</h3>
+                    <div class="chart-wrapper"><canvas id="compBarMissed"></canvas></div>
+                </div>
+            </div>
+            <!-- Comparison stat cards -->
+            <div class="comp-stats-row" id="compStatsRow"></div>
+        </section>
+
+        <!-- Info Panel -->
+        <section class="info-panel glass-panel" id="infoPanel">
+            <h2 class="panel-title">How EATS Works</h2>
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-icon dvfs-info-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    </div>
+                    <h3>DVFS Control</h3>
+                    <p>Dynamically adjusts CPU voltage and frequency. Power scales as <strong>P = C·V²·f</strong>, so reducing voltage by 40% cuts power by ~64%.</p>
+                </div>
+                <div class="info-card">
+                    <div class="info-icon thermal-info-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+                    </div>
+                    <h3>Thermal-Aware</h3>
+                    <p>Monitors die temperature using an RC thermal model. Soft-throttles at <strong>75°C</strong> and forces minimum frequency at <strong>90°C</strong>.</p>
+                </div>
+                <div class="info-card">
+                    <div class="info-icon priority-info-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                    </div>
+                    <h3>Priority Scheduling</h3>
+                    <p>Critical tasks get highest priority with EDF ordering. Background tasks run at minimum power when no deadlines are urgent.</p>
+                </div>
+                <div class="info-card">
+                    <div class="info-icon core-info-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>
+                    </div>
+                    <h3>Core Management</h3>
+                    <p>Activates only the cores needed for current workload, reducing static/leakage power by up to <strong>75%</strong> when idle.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <p>EATS — Energy-Aware Thermal CPU Scheduler Simulator · DVFS + Thermal-Aware Scheduling for Mobile & Embedded Systems</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
