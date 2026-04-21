@@ -667,3 +667,234 @@ class CPUSimApp:
                               reset=tk.NORMAL, compare=tk.NORMAL, batch=tk.NORMAL)
 
         self.canvas.draw_idle()   # draw_idle is faster than draw()
+    # ---------------------------------------------------------------- compare
+    def compare_all(self):
+        self._set_buttons(start=tk.DISABLED, pause=tk.DISABLED,
+                          reset=tk.DISABLED, compare=tk.DISABLED, batch=tk.DISABLED)
+        self.status_label.config(text="Comparing all schedulers...")
+
+        def worker():
+            seed    = int(self.seed_var.get())
+            n_tasks = int(self.ntasks_var.get())
+            tasks   = generate_workload(seed=seed, n=n_tasks)
+
+            res = {}
+            for Cls in (EATSStepper, PerformanceFirstStepper, RoundRobinStepper):
+                s = Cls(deepcopy(tasks))
+                while s.step(DT):
+                    pass
+                res[s.NAME] = {
+                    "s": s,
+                    "energy":    s.energy,
+                    "peak_temp": max(s.history["temp"]) if s.history["temp"] else AMBIENT_TEMP,
+                    "missed":    _calc_missed(s),
+                    "done":      sum(1 for t in s.tasks if t.is_done()),
+                }
+
+            def draw():
+                self._lines = None  # disable animation lines
+
+                for ax in self.axs.flat:
+                    ax.cla()
+                    self._style_ax(ax)
+
+                # (0,0) energy overlay
+                ax = self.axs[0, 0]
+                for nm, d in res.items():
+                    tt = np.array(d["s"].history["t"])
+                    ax.plot(tt, np.array(d["s"].history["energy"]),
+                            label=nm, color=SCHED_COLOR[nm], lw=2)
+                self._style_ax(ax, "Energy Comparison (J)")
+                ax.legend(fontsize=8, loc="upper left")
+
+                # (0,1) temperature overlay
+                ax = self.axs[0, 1]
+                for nm, d in res.items():
+                    tt = np.array(d["s"].history["t"])
+                    ax.plot(tt, np.array(d["s"].history["temp"]),
+                            label=nm, color=SCHED_COLOR[nm], lw=2)
+                ax.axhline(THROTTLE_TEMP, color="#ffd93d", ls="--", alpha=0.5)
+                ax.axhline(CRITICAL_TEMP, color="#ff0000", ls="--", alpha=0.5)
+                self._style_ax(ax, "Temperature Comparison (C)")
+                ax.legend(fontsize=8, loc="upper left")
+
+                # (1,0) frequency
+                ax = self.axs[1, 0]
+                for nm, d in res.items():
+                    tt = np.array(d["s"].history["t"])
+                    ax.step(tt, np.array(d["s"].history["freq"]), where="post",
+                            label=nm, color=SCHED_COLOR[nm], lw=1.5, alpha=0.8)
+                self._style_ax(ax, "Frequency Comparison")
+                ax.legend(fontsize=8)
+
+                # (1,1) cores
+                ax = self.axs[1, 1]
+                for nm, d in res.items():
+                    tt = np.array(d["s"].history["t"])
+                    ax.step(tt, np.array(d["s"].history["cores"]), where="post",
+                            label=nm, color=SCHED_COLOR[nm], lw=1.5, alpha=0.8)
+                self._style_ax(ax, "Active Cores Comparison")
+                ax.legend(fontsize=8)
+
+                # (2,0) bar - total energy
+                ax = self.axs[2, 0]
+                names    = list(res.keys())
+                energies = [res[n]["energy"] for n in names]
+                bars = ax.bar(names, energies,
+                              color=[SCHED_COLOR[n] for n in names], width=0.5,
+                              edgecolor="white", linewidth=0.5)
+                for bar, val in zip(bars, energies):
+                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
+                            f"{val:.2f}J", ha="center", va="bottom", fontsize=9, color=C["text"])
+                self._style_ax(ax, "Total Energy (J)")
+
+                # (2,1) bar - missed + peak-temp-rise
+                ax = self.axs[2, 1]
+                x     = np.arange(len(names))
+                w     = 0.35
+                miss  = [res[n]["missed"]    for n in names]
+                dtemp = [res[n]["peak_temp"] - AMBIENT_TEMP for n in names]
+                ax.bar(x - w/2, miss,  w, label="Missed Deadlines", color=C["hi"],
+                       edgecolor="white", linewidth=0.5)
+                ax.bar(x + w/2, dtemp, w, label="Peak Temp Rise (C)", color=C["temp"],
+                       alpha=0.7, edgecolor="white", linewidth=0.5)
+                ax.set_xticks(x)
+                short_names = []
+                for n in names:
+                    if "(" in n:
+                        short_names.append(n.split("(")[0].strip())
+                    else:
+                        short_names.append(n)
+                ax.set_xticklabels(short_names, fontsize=8)
+                self._style_ax(ax, "Missed Deadlines & Thermal Rise")
+                ax.legend(fontsize=8)
+
+                eats_e = res["EATS (Proposed)"]["energy"]
+                perf_e = res["Performance-First"]["energy"]
+                saving = (perf_e - eats_e) / perf_e * 100 if perf_e else 0
+
+                self.status_label.config(
+                    text=f"Comparison done - EATS saves {saving:.1f}% energy vs Performance-First | "
+                         f"EATS: {eats_e:.2f}J  Perf: {perf_e:.2f}J")
+                self._set_buttons(start=tk.NORMAL, pause=tk.DISABLED,
+                                  reset=tk.NORMAL, compare=tk.NORMAL, batch=tk.NORMAL)
+                self.canvas.draw()
+
+            self.master.after(50, draw)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    # ---------------------------------------------------------------- batch
+    def batch_run(self):
+        save_csv = filedialog.asksaveasfilename(
+            defaultextension=".csv", title="Save Batch CSV",
+            filetypes=[("CSV", "*.csv")])
+        if not save_csv:
+            return
+        graphs_dir = filedialog.askdirectory(title="Folder for batch graphs")
+        if not graphs_dir:
+            return
+
+        self._set_buttons(start=tk.DISABLED, pause=tk.DISABLED,
+                          reset=tk.DISABLED, compare=tk.DISABLED, batch=tk.DISABLED)
+        self.status_label.config(text="Running batch...")
+
+        def worker():
+            n_tasks   = int(self.ntasks_var.get())
+            n_seeds   = 5
+            out_dir   = os.path.join(graphs_dir, "batch_graphs")
+            os.makedirs(out_dir, exist_ok=True)
+            rows = []
+
+            for Cls in (EATSStepper, PerformanceFirstStepper, RoundRobinStepper):
+                for seed in range(1, n_seeds + 1):
+                    tasks = generate_workload(seed=seed, n=n_tasks)
+                    s     = Cls(deepcopy(tasks))
+                    while s.step(DT):
+                        pass
+                    peak = max(s.history["temp"]) if s.history["temp"] else AMBIENT_TEMP
+                    rows.append({
+                        "scheduler":        s.NAME,
+                        "seed":             seed,
+                        "energy_j":         round(s.energy, 4),
+                        "peak_temp_c":      round(peak, 2),
+                        "tasks_total":      len(s.tasks),
+                        "tasks_completed":  sum(1 for t in s.tasks if t.is_done()),
+                        "deadlines_missed": _calc_missed(s),
+                    })
+                    # per-run graph
+                    try:
+                        fig2, ax2 = plt.subplots(2, 1, figsize=(8, 5))
+                        fig2.set_facecolor(C["bg"])
+                        for a in ax2:
+                            a.set_facecolor(C["panel"]); a.grid(True, alpha=0.2)
+                        ax2[0].plot(s.history["t"], s.history["energy"], color=C["eats"], lw=2)
+                        ax2[0].set_ylabel("Energy (J)", color=C["text"])
+                        ax2[0].set_title(f"{s.NAME} - Seed {seed}", color=C["text"], fontweight="bold")
+                        ax2[1].plot(s.history["t"], s.history["temp"], color=C["temp"], lw=2)
+                        ax2[1].axhline(THROTTLE_TEMP, color="#ffd93d", ls="--", alpha=0.5)
+                        ax2[1].set_ylabel("Temp (C)", color=C["text"])
+                        ax2[1].set_xlabel("Time (s)", color=C["text"])
+                        fig2.tight_layout()
+                        safe = s.NAME.replace(" ", "_").replace("(", "").replace(")", "")
+                        fig2.savefig(os.path.join(out_dir, f"{safe}_seed{seed}.png"),
+                                     facecolor=fig2.get_facecolor(), dpi=120)
+                        plt.close(fig2)
+                    except Exception as e:
+                        print("graph error:", e)
+
+            # CSV
+            try:
+                with open(save_csv, "w", newline="") as fh:
+                    w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+                    w.writeheader(); w.writerows(rows)
+            except Exception as e:
+                print("CSV error:", e)
+
+            # summary chart
+            try:
+                fig3, ax3 = plt.subplots(1, 2, figsize=(12, 5))
+                fig3.set_facecolor(C["bg"])
+                names_u = ["EATS (Proposed)", "Performance-First", "Round-Robin"]
+                avg_e = [np.mean([r["energy_j"]    for r in rows if r["scheduler"] == n]) for n in names_u]
+                avg_t = [np.mean([r["peak_temp_c"] for r in rows if r["scheduler"] == n]) for n in names_u]
+                cols  = [SCHED_COLOR[n] for n in names_u]
+                for a in ax3:
+                    a.set_facecolor(C["panel"]); a.grid(True, alpha=0.2)
+                    a.tick_params(colors=C["text"])
+                bars = ax3[0].bar(names_u, avg_e, color=cols, edgecolor="white", lw=0.5)
+                for b, v in zip(bars, avg_e):
+                    ax3[0].text(b.get_x()+b.get_width()/2, b.get_height(),
+                                f"{v:.2f}J", ha="center", va="bottom", fontsize=10, color=C["text"])
+                ax3[0].set_title("Avg Energy (J)", color=C["text"], fontweight="bold")
+                bars = ax3[1].bar(names_u, avg_t, color=cols, edgecolor="white", lw=0.5)
+                for b, v in zip(bars, avg_t):
+                    ax3[1].text(b.get_x()+b.get_width()/2, b.get_height(),
+                                f"{v:.1f}C", ha="center", va="bottom", fontsize=10, color=C["text"])
+                ax3[1].set_title("Avg Peak Temperature (C)", color=C["text"], fontweight="bold")
+                fig3.tight_layout()
+                fig3.savefig(os.path.join(out_dir, "summary_comparison.png"),
+                             facecolor=fig3.get_facecolor(), dpi=150)
+                plt.close(fig3)
+            except Exception as e:
+                print("summary error:", e)
+
+            def finish():
+                self._set_buttons(start=tk.NORMAL, pause=tk.DISABLED,
+                                  reset=tk.NORMAL, compare=tk.NORMAL, batch=tk.NORMAL)
+                self.status_label.config(
+                    text=f"Batch done - CSV: {os.path.basename(save_csv)} | Graphs: {out_dir}")
+                messagebox.showinfo("Batch Complete",
+                    f"Results saved!\n\nCSV: {save_csv}\nGraphs: {out_dir}")
+            self.master.after(50, finish)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+
+# ============================================================
+# Entry Point
+# ============================================================
+if __name__ == "__main__":
+    root = tk.Tk()
+    app  = CPUSimApp(root)
+    root.mainloop()
