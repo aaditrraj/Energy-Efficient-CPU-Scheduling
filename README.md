@@ -30,7 +30,7 @@ The project ships with **two interfaces**:
 | 🌐 **Web App** | HTML · CSS · JavaScript · Chart.js | Open `index.html` in any browser |
 | 🖥️ **Desktop App** | Python · Tkinter · Matplotlib · NumPy | `python cpu_simulator_fixed.py` |
 
-Both interfaces implement the same simulation engine and provide identical scheduling algorithms, real-time charts, and comparison tools.
+Both  interfaces implement the same simulation engine and provide identical scheduling algorithms, real-time charts, and comparison tools.
 
 ### Core Techniques
 
