@@ -1,0 +1,340 @@
+# EATS — Energy-Aware Thermal CPU Scheduler
+## Complete Working Explanation (Faculty Presentation Guide)
+
+---
+
+## 1. Problem Statement
+
+Modern mobile and embedded CPUs face a critical tradeoff:
+- **Run fast** → consumes more power → heats up → drains battery → may damage hardware
+- **Run slow** → saves energy → stays cool → but tasks may miss their deadlines
+
+**EATS solves this** by dynamically adjusting CPU frequency, voltage, and active core count to minimize energy consumption while still meeting task deadlines — all while keeping the die temperature under safe limits.
+
+---
+
+## 2. OS Concepts Used
+
+| Concept | How It's Used |
+|---|---|
+| **CPU Scheduling** | 6 scheduling algorithms decide which task runs on which core |
+| **Preemptive Scheduling** | Higher-priority tasks can interrupt lower-priority ones |
+| **DVFS (Dynamic Voltage & Frequency Scaling)** | CPU frequency and voltage are adjusted at runtime |
+| **Thermal Management** | Temperature is monitored; CPU is throttled if it overheats |
+| **Interrupt Handling (IRQ)** | Hardware interrupts get highest priority and preempt all tasks |
+| **Context Switching** | Switching tasks on a core incurs an energy penalty (0.01 J) |
+| **Core Migration** | Moving a task between cores costs extra energy (0.03 J) |
+| **Deadline Scheduling (EDF)** | Tasks are ordered by earliest deadline first |
+| **Multi-core Processing** | Up to 4 cores can execute tasks in parallel |
+| **big.LITTLE Architecture** | Heterogeneous cores with different power/performance profiles |
+
+---
+
+## 3. System Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   USER INTERFACE                     │
+│  Controls → Stats Cards → CPU Viz → Charts → Log    │
+└──────────────────────┬──────────────────────────────┘
+                       │ reads/writes DOM
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│               APPLICATION CONTROLLER                 │
+│  (EATSApp class — handles UI, animation loop)        │
+└──────────────────────┬──────────────────────────────┘
+                       │ calls .step() every frame
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│              SCHEDULER ENGINE                        │
+│  EATSScheduler / PerformanceFirst / RoundRobin /     │
+│  SJF / FCFS / PriorityPreemptive                     │
+│                                                      │
+│  Each step():                                        │
+│    1. Get runnable tasks                             │
+│    2. Pick frequency + core count                    │
+│    3. Assign tasks to cores                          │
+│    4. Execute work for this time-step                │
+│    5. Calculate power consumption                    │
+│    6. Update temperature (thermal model)             │
+│    7. Record history for charts                      │
+└──────────────────────┬──────────────────────────────┘
+                       │ uses
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│              PHYSICS MODELS                          │
+│                                                      │
+│  Power:   P = C_dyn × V² × f + P_static × leakage  │
+│  Thermal: RC circuit (Newton's law of cooling)       │
+│  Battery: Energy accumulation against capacity       │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. Task Model
+
+Each task has these properties:
+
+| Property | Description | Example |
+|---|---|---|
+| **tid** | Unique task ID | 1, 2, 3... |
+| **wcet** | Worst-case execution time (seconds) | 0.15s |
+| **arrival** | When the task enters the system | 1.2s |
+| **deadline** | Must finish before this time | 2.0s |
+| **priority** | critical / normal / background / irq | "critical" |
+| **remaining** | How much work is left | 0.08s |
+
+Tasks are generated using a **seeded pseudo-random number generator** (Mulberry32), so the same seed always produces the same workload — making experiments reproducible.
+
+### Workload Types
+- **Mixed** — 15% critical, 50% normal, 35% background
+- **Heavy Compute** — 60% critical, 30% normal, 10% background
+- **Light IoT** — 5% critical, 15% normal, 80% background
+
+---
+
+## 5. The 6 Scheduling Algorithms
+
+### 5.1 EATS (Proposed — Energy-Aware Thermal Scheduler)
+
+This is the **main contribution** of the project. It works in 3 steps:
+
+**Step 1 — Thermal Cap:** Check current die temperature. If above 75°C, limit maximum allowed frequency. If above 90°C, force minimum frequency.
+
+**Step 2 — Configuration Search:** Try every combination of (frequency × core count) and find the **lowest-power configuration** that can still meet all task deadlines. This is the key optimization — it searches through:
+- 4 frequency levels × 4 core counts = 16 possible configurations
+- For each, it checks: "Can all ready tasks finish before their deadlines at this speed?"
+- It picks the one with the lowest power consumption
+
+**Step 3 — Priority Dispatch:** Tasks are sorted by priority (IRQ > Critical > Normal > Background), then by earliest deadline. Each active core gets the next highest-priority task.
+
+### 5.2 Performance-First
+- Always runs at **maximum frequency (1.0×)** with **all 4 cores**
+- No energy optimization at all
+- Completes tasks fastest but wastes the most energy
+- **Purpose:** Baseline to show how much energy EATS saves
+
+### 5.3 Round-Robin
+- Fixed frequency at **0.8×**, all 4 cores active
+- Tasks rotate in order of task ID
+- Classic fair-share scheduling with no priority awareness
+
+### 5.4 Shortest Job First (SJF)
+- Runs at max frequency, all cores
+- Tasks sorted by **remaining execution time** (shortest first)
+- Minimizes average waiting time but ignores deadlines
+
+### 5.5 First Come First Serve (FCFS)
+- Runs at max frequency, all cores
+- Tasks sorted by **arrival time** (first arrived = first served)
+- Simplest possible scheduler, no preemption logic
+
+### 5.6 Priority-Preemptive
+- Runs at max frequency, all cores
+- Tasks sorted by **priority level**, then by deadline
+- Higher-priority tasks immediately preempt lower ones
+- Similar to real-time OS schedulers
+
+---
+
+## 6. Power Model (DVFS)
+
+The power consumed by the CPU is calculated using the standard CMOS dynamic power equation:
+
+```
+P_dynamic = C_dyn × V² × f
+```
+
+Where:
+- **C_dyn = 2.0** — dynamic capacitance (switching activity)
+- **V** — supply voltage (depends on frequency level)
+- **f** — operating frequency (0.4× to 1.0×)
+
+### DVFS Frequency-Voltage Table
+
+| Level | Frequency | Voltage | Dynamic Power (per core) |
+|---|---|---|---|
+| Ultra Low Power | 0.4× | 0.60V | 2.0 × 0.36 × 0.4 = **0.288W** |
+| Low Power | 0.6× | 0.75V | 2.0 × 0.5625 × 0.6 = **0.675W** |
+| Balanced | 0.8× | 0.90V | 2.0 × 0.81 × 0.8 = **1.296W** |
+| Full Performance | 1.0× | 1.00V | 2.0 × 1.0 × 1.0 = **2.000W** |
+
+> [!IMPORTANT]
+> Reducing voltage by just 40% (1.0V → 0.6V) cuts dynamic power by **64%** because power scales with V². This is the key insight behind DVFS.
+
+### Static (Leakage) Power
+
+Every core also leaks power even when idle:
+
+```
+P_static = 0.25W × leakage_multiplier
+leakage_multiplier = 1 + 0.03 × (T - 25) + 0.0005 × (T - 50)²
+```
+
+This follows the **Arrhenius model** — leakage current increases exponentially with temperature. At 70°C, leakage is ~2.5× higher than at 25°C.
+
+### Total Power
+
+```
+P_total = Σ (per-core dynamic + per-core static) + cooling_power
+```
+
+For 4 cores at full performance (1.0×) at 35°C:
+- Dynamic: 4 × 2.0W = 8.0W
+- Static: 4 × 0.25W × 1.3 = 1.3W
+- **Total ≈ 9.3W**
+
+For EATS at low power (0.4×, 1 core):
+- Dynamic: 1 × 0.288W = 0.288W
+- Static: 4 × 0.25W × 1.3 = 1.3W (all cores leak)
+- **Total ≈ 1.6W**
+
+---
+
+## 7. Thermal Model (RC Circuit)
+
+The CPU die is modeled as a simple **RC thermal circuit**:
+
+```
+dT/dt = (P × R_th - (T - T_ambient)) / τ
+
+Where:
+  R_th = 12.0 °C/W    (thermal resistance, junction-to-ambient)
+  C_th = 1.8 J/°C     (thermal capacitance, die mass)
+  τ    = R × C = 21.6s (thermal time constant)
+```
+
+**Steady-state temperature** (when heat in = heat out):
+```
+T_steady = T_ambient + P × R_th
+```
+
+| Scenario | Power | Steady-State Temp |
+|---|---|---|
+| EATS (1 core, 0.4×) | ~1.6W | 35 + 1.6 × 12 = **54.2°C** |
+| Performance-First (4 cores, 1.0×) | ~9.3W | 35 + 9.3 × 12 = **146.6°C** ⚠️ |
+
+The Performance-First scheduler would theoretically reach 146°C, but **thermal throttling kicks in at 75°C**, forcing the frequency down — this is exactly what happens in real phones when they overheat!
+
+### Thermal Policy Options
+- **Standard:** Throttle at 75°C, critical shutdown at 90°C
+- **Aggressive:** Throttle at 65°C, critical at 85°C (safer but slower)
+- **Lenient:** Throttle at 85°C, critical at 100°C (riskier but faster)
+
+---
+
+## 8. Battery Model
+
+The battery is modeled as a **500 mAh single-cell LiPo** (3.7V nominal):
+
+```
+Capacity = 500mAh × 3.7V = 1.85 Wh = 6660 Joules
+
+Battery% = 100 - (Energy_consumed / 6660) × 100
+```
+
+This represents a small **embedded/IoT device** battery. In 10 seconds of simulation:
+- EATS consumes ~19J → drains **0.3%** battery
+- Performance-First consumes ~79J → drains **1.2%** battery
+
+Over an hour at these rates:
+- EATS: ~6840J → **drains battery in ~58 minutes**
+- Performance-First: ~28440J → **drains battery in ~14 minutes**
+
+> EATS extends battery life by **4× compared to Performance-First**.
+
+---
+
+## 9. UI Components Explained
+
+### Control Panel (Top)
+| Control | What It Does |
+|---|---|
+| **Scheduler** | Selects which scheduling algorithm to use |
+| **CPU Arch** | SMP (4 identical cores) or big.LITTLE (2 small + 2 big) |
+| **Seed** | Random seed for reproducible workloads |
+| **Tasks** | Number of tasks to generate (5-100) |
+| **Workload** | Mix of task priorities (Mixed/Heavy/Light) |
+| **Active Cooling** | Passive (no fan) or Fan (+1.5W cooling) |
+| **Thermal Policy** | How aggressively to throttle on heat |
+| **Ambient** | Room temperature (affects cooling) |
+| **Speed** | Simulation playback speed (0.25× to 4×) |
+
+### Stat Cards (Middle)
+| Card | What It Shows |
+|---|---|
+| **Energy Consumed** | Total Joules used so far |
+| **Die Temperature** | Current CPU die temperature in °C |
+| **CPU Utilization** | What % of active core capacity is being used |
+| **Tasks Completed** | How many tasks finished vs total |
+| **Deadline Misses** | Tasks that finished after their deadline |
+| **Current Power** | Instantaneous power draw in Watts |
+| **Battery Level** | Remaining battery percentage |
+| **Avg Wait Time** | Average time tasks waited before starting |
+
+### CPU State Panel (Left)
+- **Core Grid (C0-C3):** Lights up green when a core is active
+- **Frequency Bar:** Shows current operating frequency
+- **Temperature Gauge:** Semicircular gauge with needle showing die temp
+- **DVFS Mode:** Highlights current power mode (ULP/LP/BAL/MAX)
+- **Task Queue:** Stacked bar showing critical/normal/background tasks waiting
+- **Gantt Chart:** Timeline showing which task ran on which core and when
+
+### Charts (Right)
+Six real-time charts tracking: Energy, Temperature, Frequency, Active Cores, Utilization, and Power over the 10-second simulation window.
+
+### System Event Log (Bottom)
+Timestamped log of events: task completions, thermal throttling warnings, deadline misses, and injected interrupts.
+
+---
+
+## 10. Demo Script for Faculty
+
+### Demo 1: Basic EATS vs Performance-First
+
+1. Open `index.html` in Chrome
+2. Keep defaults (EATS, Seed=1, 30 tasks, Mixed)
+3. Click **Start** → watch simulation run
+4. Note final values: **~19J energy, ~43°C temp, 99.7% battery**
+5. Click **Reset**
+6. Change scheduler to **Performance-First**
+7. Click **Start** → watch simulation run
+8. Note final values: **~79J energy, ~71°C temp, 98.8% battery**
+9. **Key point:** EATS uses **75% less energy** for the same workload
+
+### Demo 2: Compare All Schedulers
+
+1. Click **Reset**, then **Compare All**
+2. Scroll down to see comparison charts and stat cards
+3. Show the bar chart: EATS has the lowest energy bar
+4. Show the temperature overlay: EATS stays coolest
+5. Show efficiency metric: EATS = 0.88 tasks/J vs Performance-First = 0.38 tasks/J
+
+### Demo 3: Dynamic Events (Inject + IRQ)
+
+1. Start an EATS simulation
+2. At ~3 seconds, click **Inject Tasks** — 5 new tasks arrive
+3. Watch energy curve spike upward as scheduler adapts
+4. Click **Fire IRQ** — hardware interrupt gets served immediately
+5. Check the **Gantt chart** — white block shows IRQ execution
+6. Check the **Event Log** — all events are timestamped
+
+### Demo 4: Thermal Throttling
+
+1. Set Thermal Policy to **Aggressive** (throttles at 65°C)
+2. Set scheduler to **Performance-First**
+3. Click **Start**
+4. Watch temperature rise → at 65°C the log shows "Thermal throttling engaged"
+5. The temperature card border turns **yellow** as a warning
+6. **Key point:** The OS automatically protects hardware from overheating
+
+---
+
+## 11. Key Takeaways for Faculty
+
+1. **DVFS is the most effective power-saving technique** — reducing voltage by 40% saves 64% power (V² relationship)
+2. **Thermal-aware scheduling prevents hardware damage** — real phones do this when they feel hot
+3. **Energy-aware schedulers trade off throughput for efficiency** — EATS completes fewer tasks but uses 4× less energy
+4. **The tradeoff is configurable** — aggressive thermal policy = safer but slower; lenient = faster but riskier
+5. **This simulates real ARM big.LITTLE architecture** used in Samsung Exynos and MediaTek chips
